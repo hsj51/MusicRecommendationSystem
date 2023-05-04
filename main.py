@@ -1,4 +1,6 @@
 import customtkinter as ctk
+
+# Image library
 from PIL import Image, ImageTk
 #from urllib.request import urlopen
 
@@ -19,7 +21,7 @@ class App:
         # open video source (by default this will try to open the computer webcam)
         self.vid = VideoCamera(self.video_source)
 
-        # Creater Lable
+        # placeholder Label
         self.creater_label=ctk.CTkLabel(window, text='', justify='left', anchor=ctk.W, width=200)
         self.creater_label.grid(row=2, column=0, padx=10, pady=10)
 
@@ -49,7 +51,7 @@ class App:
         self.recommender = RecommendationSystem()
 
         # after starting the GUI loop, call the update() method periodically to update the video stream
-        self.delay = 10
+        self.delay = 1
         self.update()
 
         self.window.mainloop()
@@ -61,20 +63,29 @@ class App:
         # Get a frame from the video source
         ret, frame = self.vid.get_frame()
 
+        # predict emotion from song
         prediction = self.recommender.detect_emotion(ret, frame)
+
         if prediction:
+
+            # get song recommendations
             song = self.recommender.recommend_song(prediction[0])
 
             # Done # ------------ TODO: Update Spotify Frame Code ---------------#
             self.emotion_label.configure(text=f"\nEmotion: {prediction[1]}\nSong Mood: {song[0]}")
-            print(self.emotion_label.cget("width"))
 
             self.spotify_frame.grid(row=1, column=3, padx=10, pady=10)
             self.label2.grid(row=0, column=3, padx=10, pady=10)
             print(f"\nEmotion: {prediction[1]} | Song Mood: {song[0]}\nSong: {song[1]}\n")
+
+            # update songs in the player frame
             self.spotify_frame.updatePlaylistTracks()
 
     def update(self):
+        """
+        loop function to update the tkinter app
+        predict the expression and update the frame
+        """
         # Get a frame from the video source
         ret, frame = self.vid.get_frame()
 
@@ -91,4 +102,4 @@ class App:
 App(ctk.CTk(), "Music Recommendation System")
 
 # except Exception as e:
-#     print('E:', e)
+#      print('E:', e)

@@ -1,12 +1,15 @@
 import random
 import timeit
 
+# library to handle csv/dataframes
 import pandas as pd
+
+# Spotify API Library
 import spotipy
 import spotipy.util as util
 from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
+
 from sklearn.preprocessing import StandardScaler
-#from numpy import argmax
 import pickle
 from os import getenv
 from dotenv import load_dotenv
@@ -14,6 +17,9 @@ from dotenv import load_dotenv
 load_dotenv(".env")
 
 def cleanDuplicates(tracks):
+    """
+    remove duplicates from the dataframe
+    """
     grouped = tracks.groupby(
         ['artist_name', 'track_name'], as_index=True).size()
     grouped[grouped > 1].count()
@@ -21,6 +27,9 @@ def cleanDuplicates(tracks):
 
 
 def dropColumns(df_audio_features):
+    """
+    drop the columns from the dataframe which are not required
+    """
     columns_to_drop = ['analysis_url', 'track_href',
                        'type', 'key', 'mode', 'time_signature', 'uri']
     df_audio_features.drop(columns_to_drop, axis=1, inplace=True)
@@ -39,6 +48,9 @@ def mergeDataframes(df_tracks, df_audio_features):
 
 
 def getRandomSearch():
+    """
+    Random character generator
+    """
     # A list of all characters that can be chosen.
     characters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
                   'u', 'v', 'w', 'x', 'y', 'z']
@@ -58,6 +70,7 @@ def getRandomSearch():
 
 class MusicMoodClassifier:
     def __init__(self):
+        # get variables from .env file
         self.cid = getenv("SPOTIFY_CLIENT_ID", None) #"a006ea8174bc4689b4eb39c47b5449a1"
         self.secret = getenv("SPOTIFY_CLIENT_SECRET", None) #"1cca3d1fff6145fdaee72ba822e8b586"
         self.playlist_id = getenv("SPOTIFY_PLAYLIST_ID", "6FDF6e5kvOAm7Jm4kh31OZ") #"6FDF6e5kvOAm7Jm4kh31OZ"
@@ -68,11 +81,16 @@ class MusicMoodClassifier:
                                 redirect_uri='http://localhost:'+ getenv('PORT', '7483'),
                                 scope=self.scope
                             )
-
+        # initialize the spotify client
         self.sp = spotipy.Spotify(self.token)
+
+        # load the saved music model from pickle file
         self.estimator = pickle.load(open('data/music_model_knn_new.pkl', 'rb'))
 
     def getTracks(self, number):
+        """
+        get N number of songs using spotify search
+        """
         start = timeit.default_timer()
 
         # create empty lists where the results are going to be stored
@@ -94,10 +112,13 @@ class MusicMoodClassifier:
                 tracks['popularity'].append(t['popularity'])
 
         stop = timeit.default_timer()
-        print(f'Time to run this code (getTracks - {number}): {stop - start}')
+        # print(f'Time to run this code (getTracks - {number}): {stop - start}')
         return pd.DataFrame(tracks)
 
     def getAudioFeatures(self, tracks):
+        """
+        get the audio (acoustic) features of the songs using spotify API
+        """
         # again measuring the time
         start = timeit.default_timer()
 
@@ -117,25 +138,47 @@ class MusicMoodClassifier:
                     rows.append(t)
 
         if none_counter:
-            print(
-                'Number of tracks where no audio features were available:', none_counter)
+            print('Number of tracks where no audio features were available:', none_counter)
 
         stop = timeit.default_timer()
-        print(
-            f'Time to run this code (getAudioFeatures - { len(rows) }): {stop - start}')
+        # print(f'Time to run this code (getAudioFeatures - { len(rows) }): {stop - start}')
         df_audio_features = pd.DataFrame.from_dict(rows, orient='columns')
         return df_audio_features
 
     def getTypicalTracks(self, typicalMood):
+        """
+        get songs from spotify with particular mood
+        Workflow:
+                - get 50/100 songs using spotify search
+                - get their acoustic features
+                - feed the acoustic features to the knn model
+                - model predicts their mood
+                - filter songs with required mood
+                - update playlist with the new songs
+        """
+
+        # get songs using search api
         test = self.getTracks(100 if typicalMood == 0 else 50)
+
+        # clean duplicate songs
         cleanDuplicates(test)
+
+        #get acoustic features of songs
         test_features = self.getAudioFeatures(test)
+
+        # drop duplicate songs
         dropColumns(test_features)
+
+        # merge the songs tracks and their acoustic features into one dataframe
         df_test = mergeDataframes(test, test_features)
+
         test_col_features = df_test.columns[4:13]
         df_test_features = df_test[test_col_features]
 
+        # apply transformations
         df_test_features = StandardScaler().fit_transform(df_test_features)
+
+        # predict mood
         mood_preds_test = self.estimator.predict(df_test_features)
         IDs = list(test['track_id'])
 
@@ -149,6 +192,7 @@ class MusicMoodClassifier:
         # print(len(results), results)
         # playlist = ['6vN77lE9LK6HP2DewaN6HZ', '3AJwUDP919kvQ9QcozQPxg', '2UikqkwBv7aIvlixeVXHWt', '7zwn1eykZtZ5LODrf7c0tS', '0xaFw2zDYf1rIJWl2dXiSF', '6tB01QHgH9YuVA8TomAzni', '3d8y0t70g7hw2FOWl9Z4Fm', '7t2bFihaDvhIrd2gn2CWJO', '0WrIAsGJOei2FGeakvpTDU', '40riOy7x9W7GXjyGp4pjAv', '1bDbXMyjaUIooNwFE9wn0N', '7oDd86yk8itslrA9HRP2ki', '59nOXPmaKlBfGMDeOVGrIK', '73zawW1ttszLRgT9By826D', '7fveJ3pk1eSfxBdVkzdXZ0', '2Ch7LmS7r2Gy2kc64wv3Bz', '1Y3LN4zO1Edc2EluIoSPJN', '2aw1aEAxMe05MZIS5XiK8U', '5XeFesFbtLpXzIVDNQP22n']
 
+        # update playlist with new songs
         self.sp.playlist_replace_items(self.playlist_id, results)
 
         return "https://open.spotify.com/playlist/" + self.playlist_id       

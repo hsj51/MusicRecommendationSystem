@@ -14,6 +14,9 @@ class VideoCamera:
         self.height = self.vid.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
     def get_frame(self):
+        """
+            Get frame from the active camera device
+        """
         if self.vid.isOpened():
             ret, frame = self.vid.read()
             if ret:
